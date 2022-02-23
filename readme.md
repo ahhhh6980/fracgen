@@ -4,7 +4,7 @@
 
 Currently only supports the mandelbrot set, but formula specification will be the next update.
 
-![](mandelbrot_1920x1680-0.7_s4-2.png)
+![](out/mandelbrot_1920x1680-0.7_s4-2.png)
 
 ## To compile
 `cargo build --release`
