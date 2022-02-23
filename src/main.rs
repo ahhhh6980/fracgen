@@ -220,13 +220,6 @@ where
 
 fn main() {
     let args: Args = argh::from_env();
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(args.threads)
-        .build_global()
-        .unwrap();
-    let now = Instant::now();
-    let mandelbrot = Renderer::new(args.clone(), |z, c| z * z + c);
-    let output = mandelbrot.render();
     let name = format!(
         "out{}{}_{}x{}-{}_s{}-{}.png",
         path::MAIN_SEPARATOR,
@@ -237,7 +230,14 @@ fn main() {
         args.samples,
         args.sample_d
     );
+    println!("Now processing {} with {} threads...", name, args.threads);
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build_global()
+        .unwrap();
+    let now = Instant::now();
+    let mandelbrot = Renderer::new(args.clone(), |z, c| z * z + c);
+    let output = mandelbrot.render();
     output.save(name).unwrap();
-    println!("Finished in: {}ms", now.elapsed().as_millis());
-    println!("Hello, world!");
+    println!("Finished in: {}ms!", now.elapsed().as_millis());
 }
