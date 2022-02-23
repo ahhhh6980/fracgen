@@ -15,11 +15,11 @@ Currently only supports the mandelbrot set, but formula specification will be th
 ## Commands
 filename: `--name str`
 * example: `--name mandelbrot`
-* example: `--n mandelbrot`
+* example: `-n mandelbrot`
 
 threads: `--threads x`
 * example: `--threads 4`
-* example: `--t 4`
+* example: `-t 4`
 
 width: `--w x`
 * example: `--w 1920`
@@ -29,14 +29,14 @@ height: `--h x`
 
 origin: `--origin x,y`
 * example: `--origin -0.75,0.0`
-* example: `--o -0.75,0.0`
+* example: `-o -0.75,0.0`
 
 set coloring: `--set_color r,g,b,a`
 * example: `--set_color 0,0,0,255`
 
 zoom: `--zoom x`
 * example: `--zoom 0.7`
-* example: `--z 0.7`
+* example: `-z 0.7`
 
 samples: `--samples x`
 * example: `--samples 4`
@@ -46,11 +46,11 @@ sample distance: `--sample_d x`
 
 iteration limit: `--limit x`
 * example: `--limit 256.0`
-* example: `--l 256.0`
+* example: `-l 256.0`
 
 iter bailout: `--bail x`
 * example: `--bail 4.0`
-* example: `--b 4.0`
+* example: `-b 4.0`
 
 color exponent: `--c_exp x`
 * example: `--c_exp 1.0`
