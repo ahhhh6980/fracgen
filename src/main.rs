@@ -15,177 +15,121 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use argh::FromArgs;
+use clap::Parser;
 use image::{ImageBuffer, Rgba};
+use notify_rust::{Notification, Timeout};
 use num::complex::Complex;
 use rand::Rng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::{path, time::Instant};
+use std::{
+    path::{self, Path},
+    time::Instant,
+};
 
 mod rgbaf;
 use rgbaf::RgbaF;
 
-#[derive(FromArgs, Clone)]
-#[argh(description = "args")]
+#[derive(Parser, Debug, Clone)]
+#[clap(author, version, about, long_about = None)]
 pub struct Args {
-    #[argh(
-        option,
-        short = 'o',
-        from_str_fn(complex_from_str),
-        description = "coordinate at center of image",
-        default = "Complex::<f32>::new(-0.75,0.0)"
-    )]
-    origin: Complex<f32>,
+    #[clap(short, long, default_value = "1920")]
+    width: i32,
 
-    #[argh(option, short = 'z', description = "zoom factor", default = "0.7")]
-    zoom: f32,
+    #[clap(short, long, default_value = "1680")]
+    height: i32,
 
-    #[argh(option, description = "samples per pixel", default = "4")]
-    samples: usize,
-
-    #[argh(
-        option,
-        description = "divisor for sample distance, smaller is blurrier",
-        default = "2.0"
-    )]
-    sample_d: f32,
-
-    #[argh(
-        option,
-        short = 'l',
-        description = "iteration limit",
-        default = "256.0"
-    )]
-    limit: f32,
-
-    #[argh(
-        option,
-        short = 'b',
-        description = "bailout value for z",
-        default = "16.0"
-    )]
-    bail: f32,
-
-    #[argh(
-        option,
-        description = "color exponent to nudge where colors appear",
-        default = "1.0"
-    )]
-    c_exp: f32,
-
-    #[argh(
-        option,
-        from_str_fn(color_from_str),
-        description = "color of the set",
-        default = "RgbaF::new_alpha(0.0,1.0).to_sRGB()"
-    )]
-    set_color: RgbaF,
-
-    #[argh(option, description = "width", default = "1920")]
-    w: i32,
-
-    #[argh(option, description = "height", default = "1680")]
-    h: i32,
-
-    #[argh(
-        option,
-        short = 'n',
-        description = "file name",
-        default = "String::from(\"mandelbrot\")"
-    )]
+    #[clap(short, long, default_value = "mandelbrot")]
     name: String,
 
-    #[argh(
-        option,
-        short = 't',
-        description = "threads",
-        default = "((num_cpus::get() as f32) * 0.5).ceil() as usize"
-    )]
+    #[clap(short, long, default_value_t=((num_cpus::get() as f32) * 0.5).ceil() as usize)]
     threads: usize,
+
+    #[clap(short, long, default_value_t=Complex::<f32>::new(-0.75,0.0))]
+    origin: Complex<f32>,
+
+    #[clap(short, long, default_value = ".7")]
+    zoom: f32,
+
+    #[clap(short, long, default_value = "1")]
+    samples: usize,
+
+    #[clap(short, long, default_value = "2.0")]
+    sampled: f32,
+
+    #[clap(short, long, default_value = "256.0")]
+    limit: f32,
+
+    #[clap(short, long, default_value = "16.0")]
+    bail: f32,
+
+    #[clap(short, long, default_value = "1.0")]
+    cexp: f32,
+
+    #[clap(short, long, default_value = "0,0,0,255")]
+    set_color: RgbaF,
 }
 
-fn complex_from_str(string: &str) -> Result<Complex<f32>, String> {
-    let cols: Vec<f32> = string
-        .split(',')
-        .map(|x| x.parse::<f32>().unwrap())
-        .collect();
-    Ok(Complex::<f32>::new(cols[0], cols[1]))
-}
-fn color_from_str(string: &str) -> Result<RgbaF, String> {
-    let cols: Vec<f32> = string
-        .split(',')
-        .map(|x| x.parse::<f32>().unwrap())
-        .collect();
-    Ok(RgbaF {
-        r: cols[0] / 255.0,
-        g: cols[1] / 255.0,
-        b: cols[2] / 255.0,
-        a: cols[3] / 255.0,
-        sRGB: false,
-    })
+fn abs(z: Complex<f32>) -> f32 {
+    z.re * z.re + z.im * z.im
 }
 
-pub struct Renderer<F>
-where
-    F: Fn(Complex<f32>, Complex<f32>) -> Complex<f32> + Send + Sync + 'static,
-{
+fn normalize_coords(x: i32, y: i32, w: i32, h: i32, z: f32) -> Complex<f32> {
+    let nx = 2.0 * (x as f32 / w as f32) - 1.0;
+    let ny = 2.0 * (y as f32 / h as f32) - 1.0;
+    Complex::new(nx / z, ny * (h as f32 / w as f32) / z)
+}
+
+pub struct Functs {
+    iter_funct: fn(Complex<f32>, Complex<f32>) -> Complex<f32>,
+    init_funct: fn(Complex<f32>) -> Complex<f32>,
+    cmap_funct: fn(z: Complex<f32>) -> Complex<f32>,
+    color_funct: fn(f32, f32, Complex<f32>, f32, f32) -> RgbaF,
+}
+
+pub struct Renderer {
     args: Args,
-    w: i32,
-    h: i32,
-    funct: F,
+    width: i32,
+    height: i32,
+    functs: Functs,
 }
 
-impl<F> Renderer<F>
-where
-    F: Fn(Complex<f32>, Complex<f32>) -> Complex<f32> + Send + Sync + 'static,
-{
-    pub fn new(args: Args, funct: F) -> Renderer<F> {
+impl Renderer {
+    pub fn new(args: Args, functs: Functs) -> Renderer {
         Renderer {
             args: args.clone(),
-            w: args.w,
-            h: args.h,
-            funct: funct,
+            width: args.width,
+            height: args.height,
+            functs: functs,
         }
-    }
-
-    fn abs(z: Complex<f32>) -> f32 {
-        z.re * z.re + z.im * z.im
-    }
-
-    fn normalize_coords(x: i32, y: i32, w: i32, h: i32, z: f32) -> Complex<f32> {
-        let nx = 2.0 * (x as f32 / w as f32) - 1.0;
-        let ny = 2.0 * (y as f32 / h as f32) - 1.0;
-        Complex::new(nx / z, ny * (h as f32 / w as f32) / z)
     }
 
     pub fn pixel(&self, i: i32) -> Rgba<u16> {
         let mut out = RgbaF::new(0.0);
-        let d: Complex<f32> = Renderer::<F>::normalize_coords(1, 1, self.w, self.h, self.args.zoom)
-            - Renderer::<F>::normalize_coords(0, 0, self.w, self.h, self.args.zoom);
+        let d: Complex<f32> = normalize_coords(1, 1, self.width, self.height, self.args.zoom)
+            - normalize_coords(0, 0, self.width, self.height, self.args.zoom);
         let mut rng = rand::thread_rng();
         for _ in 0..self.args.samples {
-            let mut c = Renderer::<F>::normalize_coords(
-                i / self.h,
-                i % self.h,
-                self.w,
-                self.h,
+            let mut c = normalize_coords(
+                i / self.height,
+                i % self.height,
+                self.width,
+                self.height,
                 self.args.zoom,
             ) + self.args.origin;
-            c.re += d.re * (rng.gen_range(-1.0..1.0) / self.args.sample_d);
-            c.im += d.im * (rng.gen_range(-1.0..1.0) / self.args.sample_d);
-            let mut z = c.clone();
+            c.re += d.re * (rng.gen_range(-1.0..1.0) / self.args.sampled);
+            c.im += d.im * (rng.gen_range(-1.0..1.0) / self.args.sampled);
+            let c = (self.functs.cmap_funct)(c);
+            let mut z = (self.functs.init_funct)(c);
             let mut i = 0.0;
             let mut s = 0.0;
-            while (Renderer::<F>::abs(z) < self.args.bail) && i < self.args.limit {
-                z = (self.funct)(z, c);
+            while (abs(z) < self.args.bail) && i < self.args.limit {
+                z = (self.functs.iter_funct)(z, c);
                 i += 1.0;
-                s = s + (-(Renderer::<F>::abs(z))).exp();
+                s = s + (-(abs(z))).exp();
             }
-            let hue = ((1.0 - (s / self.args.limit)) * 360.0)
-                .powf(self.args.c_exp)
-                .powf(1.5);
-            let mut color = RgbaF::from_hsv(hue, 0.5, 1.0, 1.0);
-            color.a = 1.0;
+
+            let mut color = (self.functs.color_funct)(i, s, z, self.args.limit, self.args.cexp);
+
             color = color.to_sRGB();
             if i < self.args.limit {
                 out = out + (color * color);
@@ -202,42 +146,96 @@ where
     }
 
     pub fn render(&self) -> ImageBuffer<Rgba<u16>, Vec<u16>> {
-        let mut output = ImageBuffer::<Rgba<u16>, Vec<u16>>::new(self.w as u32, self.h as u32);
-        let out: Vec<Rgba<u16>> = (0..(self.w * self.h))
+        let mut output =
+            ImageBuffer::<Rgba<u16>, Vec<u16>>::new(self.width as u32, self.height as u32);
+        let out: Vec<Rgba<u16>> = (0..(self.width * self.height))
             .into_par_iter()
             .map(|i| Renderer::pixel(self, i as i32))
             .collect();
         for (i, e) in out.iter().enumerate() {
             //println!(e);
-            let (x, y) = ((i as i32 / (self.h)) as u32, (i as i32 % (self.h)) as u32);
-            if (y as i32) < self.h {
+            let (x, y) = (
+                (i as i32 / (self.height)) as u32,
+                (i as i32 % (self.height)) as u32,
+            );
+            if (y as i32) < self.height {
                 output.put_pixel(x, y, *e);
             }
         }
         output
     }
+
+    pub fn update_args(mut self, args: Args) {
+        self.args = args.clone();
+        self.width = args.width;
+        self.height = args.height;
+    }
+
+    pub fn update_functs(mut self, functs: Functs) {
+        self.functs = functs;
+    }
 }
 
+fn coloring(i: f32, s: f32, z: Complex<f32>, limit: f32, cexp: f32) -> RgbaF {
+    let hue = ((1.0 - (s / limit)) * 360.0).powf(cexp).powf(1.5);
+    let mut color = RgbaF::from_hsv(hue, 0.5, 1.0, 1.0);
+    color.a = 1.0;
+    color
+}
+
+fn map_complex(z: Complex<f32>) -> Complex<f32> {
+    z
+}
+
+// fn open_frac<P: AsRef<Path>>(n: P) {
+//     open::that(n).unwrap();
+// }
+
 fn main() {
-    let args: Args = argh::from_env();
+    let args = Args::parse();
     let name = format!(
         "out{}{}_{}x{}-{}_s{}-{}.png",
         path::MAIN_SEPARATOR,
         args.name,
-        args.w,
-        args.h,
+        args.width,
+        args.height,
         args.zoom,
         args.samples,
-        args.sample_d
+        args.sampled
     );
     println!("Now processing {} with {} threads...", name, args.threads);
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.threads)
         .build_global()
         .unwrap();
+    // (z / (z-c).sin()).powc(z / c) + c
+    // SPADE: (z * c).powc(z / c) + (z / c)
     let now = Instant::now();
-    let mandelbrot = Renderer::new(args.clone(), |z, c| z * z + c);
+
+    let functs = Functs {
+        iter_funct: |z, c| z * z + c,
+        init_funct: |c| c,
+        cmap_funct: map_complex,
+        color_funct: coloring,
+    };
+    let mandelbrot = Renderer::new(args.clone(), functs);
     let output = mandelbrot.render();
-    output.save(name).unwrap();
-    println!("Finished in: {}ms!", now.elapsed().as_millis());
+    output.save(&name).unwrap();
+    let notif = format!("Finished in: {}ms!", now.elapsed().as_millis());
+
+    Notification::new()
+        .summary("fracmd rendered")
+        .action("default", "default")
+        .action("clicked", "Open Image")
+        .body(&notif)
+        .timeout(Timeout::Milliseconds(30000))
+        .show()
+        .unwrap()
+        .wait_for_action(|action| match action {
+            "default" => (),
+            "clicked" => open::that(&name).unwrap(),
+            "__closed" => (),
+            _ => (),
+        });
+    println!("{}", notif);
 }

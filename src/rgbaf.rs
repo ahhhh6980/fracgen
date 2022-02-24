@@ -15,6 +15,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use std::{num::ParseIntError, str::FromStr};
+
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug)]
 pub struct RgbaF {
@@ -130,6 +132,23 @@ impl RgbaF {
             (self.b * u8::MAX as f32) as u8,
             (self.a * u8::MAX as f32) as u8,
         ]
+    }
+}
+
+impl FromStr for RgbaF {
+    type Err = ParseIntError;
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        let cols: Vec<f32> = string
+            .split(',')
+            .map(|x| x.parse::<f32>().unwrap())
+            .collect();
+        Ok(RgbaF {
+            r: cols[0] / 255.0,
+            g: cols[1] / 255.0,
+            b: cols[2] / 255.0,
+            a: cols[3] / 255.0,
+            sRGB: false,
+        })
     }
 }
 
