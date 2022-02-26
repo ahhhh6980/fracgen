@@ -1,4 +1,4 @@
-# fracmd
+# fracgen
 
 ## Cpu fractal rendering run from the command prompt!
 
@@ -10,7 +10,7 @@ Currently only supports the mandelbrot set, but formula specification will be th
 `cargo build --release`
 
 ## To use
-`./fracmd --w 1920 --h 1680 --name mandelbrot --threads 4 --zoom 0.7 --limit 256.0 --bail 4.0`
+`./fracgen --w 1920 --h 1680 --name mandelbrot --threads 4 --zoom 0.7 --limit 256.0 --bail 4.0`
 
 ## Commands
 filename: `--name str`
