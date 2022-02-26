@@ -1,4 +1,4 @@
-// fracmd
+// fracgen
 // RgbaF type
 // (C) 2022 by Jacob (ahhhh6980@gmail.com)
 

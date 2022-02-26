@@ -1,4 +1,4 @@
-// fracmd
+// fracgen
 // Main File
 // (C) 2022 by Jacob (ahhhh6980@gmail.com)
 
@@ -224,7 +224,7 @@ fn main() {
     let notif = format!("Finished in: {}ms!", now.elapsed().as_millis());
 
     Notification::new()
-        .summary("fracmd rendered")
+        .summary("fracgen rendered")
         .action("default", "default")
         .action("clicked", "Open Image")
         .body(&notif)
