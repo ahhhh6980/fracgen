@@ -21,10 +21,7 @@ use notify_rust::{Notification, Timeout};
 use num::complex::Complex;
 use rand::Rng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::{
-    path,
-    time::Instant,
-};
+use std::{path, time::Instant};
 
 mod color;
 use color::Color;
@@ -179,7 +176,7 @@ impl Renderer {
 fn coloring(i: f32, s: f32, z: Complex<f32>, limit: f32, cexp: f32) -> Color {
     let hue = ((1.0 - (s / limit)) * 360.0).powf(cexp).powf(1.5);
     let mut color = Color::from_hsv(hue, 1.0, 1.0, 1.0);
-    color.a = 1.0;
+    color.ch[3] = 1.0;
     color
 }
 
@@ -223,20 +220,20 @@ fn main() {
     output.save(&name).unwrap();
     let notif = format!("Finished in: {}ms!", now.elapsed().as_millis());
 
-    Notification::new()
-        .summary("fracgen rendered")
-        .action("default", "default")
-        .action("clicked", "Open Image")
-        .body(&notif)
-        .timeout(Timeout::Milliseconds(60000))
-        .show()
-        .unwrap()
-        .wait_for_action(|action| match action {
-            "default" => (),
-            "clicked" => open::that(&name).unwrap(),
-            "__closed" => (),
-            _ => (),
-        });
-        
+    // Notification::new()
+    //     .summary("fracgen rendered")
+    //     .action("default", "default")
+    //     .action("clicked", "Open Image")
+    //     .body(&notif)
+    //     .timeout(Timeout::Milliseconds(60000))
+    //     .show()
+    //     .unwrap()
+    //     .wait_for_action(|action| match action {
+    //         "default" => (),
+    //         "clicked" => open::that(&name).unwrap(),
+    //         "__closed" => (),
+    //         _ => (),
+    //     });
+
     println!("{}", notif);
 }

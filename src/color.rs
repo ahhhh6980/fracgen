@@ -21,16 +21,13 @@ use std::{num::ParseIntError, str::FromStr};
 pub enum ColorType {
     RGBA,
     SRGBA,
-    HSVA
+    HSVA,
 }
 
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Debug)]
 pub struct Color {
-    pub r: f32,
-    pub g: f32,
-    pub b: f32,
-    pub a: f32,
+    pub ch: [f32; 4],
     pub mode: ColorType,
 }
 
@@ -38,37 +35,25 @@ pub struct Color {
 impl Color {
     pub fn new_color_alpha(r: f32, g: f32, b: f32, a: f32) -> Color {
         Color {
-            r,
-            g,
-            b,
-            a,
+            ch: [r, g, b, a],
             mode: ColorType::RGBA,
         }
     }
     pub fn new_color(r: f32, g: f32, b: f32) -> Color {
         Color {
-            r,
-            g,
-            b,
-            a: 1.0,
+            ch: [r, g, b, 1.0],
             mode: ColorType::RGBA,
         }
     }
     pub fn new_alpha(v: f32, a: f32) -> Color {
         Color {
-            r: v,
-            g: v,
-            b: v,
-            a,
+            ch: [v, v, v, a],
             mode: ColorType::RGBA,
         }
     }
     pub fn new(v: f32) -> Color {
         Color {
-            r: v,
-            g: v,
-            b: v,
-            a: 1.0,
+            ch: [v, v, v, 1.0],
             mode: ColorType::RGBA,
         }
     }
@@ -82,21 +67,21 @@ impl Color {
                         ColorType::SRGBA => self.to_RGBA().to_HSVA(),
                         _ => self,
                     };
-                },
+                }
                 ColorType::RGBA => {
                     match self.mode {
                         ColorType::SRGBA => self.to_RGBA(),
                         ColorType::HSVA => self.to_RGBA(),
                         _ => self,
                     };
-                },
+                }
                 ColorType::SRGBA => {
                     match self.mode {
                         ColorType::RGBA => self.to_sRGBA(),
                         ColorType::HSVA => self.to_RGBA().to_sRGBA(),
                         _ => self,
                     };
-                },
+                }
             }
         }
         self
@@ -125,21 +110,23 @@ impl Color {
     pub fn from_hsv(h: f32, s: f32, v: f32, a: f32) -> Color {
         let h = h % 360.0;
         Color {
-            r: Color::f_hsv(h, s, v, 5.0),
-            g: Color::f_hsv(h, s, v, 3.0),
-            b: Color::f_hsv(h, s, v, 1.0),
-            a: a,
+            ch: [
+                Color::f_hsv(h, s, v, 5.0),
+                Color::f_hsv(h, s, v, 3.0),
+                Color::f_hsv(h, s, v, 1.0),
+                a,
+            ],
             mode: ColorType::RGBA,
         }
     }
 
     pub fn to_HSVA(&self) -> Color {
-        let v = self.r.max(self.g.max(self.b));
-        let min = self.r.min(self.g.min(self.b));
+        let v = self.ch[0].max(self.ch[1]).max(self.ch[2]);
+        let min = self.ch[0].min(self.ch[1]).min(self.ch[2]);
         let c = v - min;
         // let l = v - (c / 2.0);
         let mut h = 0.0;
-        let (r, g, b) = (self.r, self.g, self.b);
+        let (r, g, b) = (self.ch[0], self.ch[1], self.ch[2]);
         if c != 0.0 {
             h = 60.0;
             if v == r {
@@ -157,75 +144,56 @@ impl Color {
             s = c / v;
         }
         Color {
-            r: h,
-            g: s,
-            b: v,
-            a: self.a,
+            ch: [h, s, v, self.ch[3]],
             mode: ColorType::HSVA,
         }
     }
 
     pub fn to_sRGBA(&self) -> Color {
         Color {
-            r: Color::sRGB(self.r, false),
-            g: Color::sRGB(self.g, false),
-            b: Color::sRGB(self.b, false),
-            a: Color::sRGB(self.a, true),
+            ch: self.ch.map(|v| Color::sRGB(v, false)),
             mode: ColorType::SRGBA,
         }
     }
     pub fn to_RGBA(&self) -> Color {
         if self.mode == ColorType::HSVA {
             Color {
-                r: Color::f_hsv(self.r, self.g, self.b, 5.0),
-                g: Color::f_hsv(self.r, self.g, self.b, 3.0),
-                b: Color::f_hsv(self.r, self.g, self.b, 1.0),
-                a: self.a,
+                ch: [
+                    Color::f_hsv(self.ch[0], self.ch[1], self.ch[2], 5.0),
+                    Color::f_hsv(self.ch[0], self.ch[1], self.ch[2], 3.0),
+                    Color::f_hsv(self.ch[0], self.ch[1], self.ch[2], 1.0),
+                    self.ch[3],
+                ],
                 mode: ColorType::RGBA,
             }
         } else {
             Color {
-                r: Color::sRGB(self.r, true),
-                g: Color::sRGB(self.g, true),
-                b: Color::sRGB(self.b, true),
-                a: Color::sRGB(self.a, true),
+                ch: self.ch.map(|v| Color::sRGB(v, true)),
                 mode: ColorType::RGBA,
             }
         }
     }
     pub fn to_arr(&self) -> [f32; 4] {
-        [self.r, self.g, self.b, self.a]
+        self.ch
     }
     pub fn to_arr16(&self) -> [u16; 4] {
-        [
-            (self.r * u16::MAX as f32) as u16,
-            (self.g * u16::MAX as f32) as u16,
-            (self.b * u16::MAX as f32) as u16,
-            (self.a * u16::MAX as f32) as u16,
-        ]
+        self.ch.map(|x| (x * u16::MAX as f32) as u16)
     }
     pub fn to_arr8(&self) -> [u8; 4] {
-        [
-            (self.r * u8::MAX as f32) as u8,
-            (self.g * u8::MAX as f32) as u8,
-            (self.b * u8::MAX as f32) as u8,
-            (self.a * u8::MAX as f32) as u8,
-        ]
+        self.ch.map(|x| (x * u8::MAX as f32) as u8)
     }
 }
 
 impl FromStr for Color {
     type Err = ParseIntError;
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let cols: Vec<f32> = string
+        let mut cols: Vec<f32> = string
             .split(',')
             .map(|x| x.parse::<f32>().unwrap())
             .collect();
+        let cols: [f32; 4] = cols.try_into().unwrap();
         Ok(Color {
-            r: cols[0] / 255.0,
-            g: cols[1] / 255.0,
-            b: cols[2] / 255.0,
-            a: cols[3] / 255.0,
+            ch: cols.map(|x| x / 255.0),
             mode: ColorType::RGBA,
         })
     }
@@ -236,11 +204,14 @@ impl std::ops::Add<Color> for Color {
     type Output = Color;
     fn add(self, mut _rhs: Color) -> Color {
         _rhs = _rhs.to(self.mode);
+        let cols: Vec<f32> = self
+            .ch
+            .iter()
+            .enumerate()
+            .map(|(i, v)| v + _rhs.ch[i])
+            .collect();
         Color {
-            r: self.r + _rhs.r,
-            g: self.g + _rhs.g,
-            b: self.b + _rhs.b,
-            a: self.a + _rhs.a,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
@@ -249,11 +220,14 @@ impl std::ops::Sub<Color> for Color {
     type Output = Color;
     fn sub(self, mut _rhs: Color) -> Color {
         _rhs = _rhs.to(self.mode);
+        let cols: Vec<f32> = self
+            .ch
+            .iter()
+            .enumerate()
+            .map(|(i, v)| v - _rhs.ch[i])
+            .collect();
         Color {
-            r: self.r - _rhs.r,
-            g: self.g - _rhs.g,
-            b: self.b - _rhs.b,
-            a: self.a - _rhs.a,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
@@ -262,11 +236,14 @@ impl std::ops::Mul<Color> for Color {
     type Output = Color;
     fn mul(self, mut _rhs: Color) -> Color {
         _rhs = _rhs.to(self.mode);
+        let cols: Vec<f32> = self
+            .ch
+            .iter()
+            .enumerate()
+            .map(|(i, v)| v * _rhs.ch[i])
+            .collect();
         Color {
-            r: self.r * _rhs.r,
-            g: self.g * _rhs.g,
-            b: self.b * _rhs.b,
-            a: self.a * _rhs.a,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
@@ -276,11 +253,9 @@ impl std::ops::Mul<Color> for Color {
 impl std::ops::Add<f32> for Color {
     type Output = Color;
     fn add(self, _rhs: f32) -> Color {
+        let cols: Vec<f32> = self.ch.iter().map(|v| v + _rhs).collect();
         Color {
-            r: self.r + _rhs,
-            g: self.g + _rhs,
-            b: self.b + _rhs,
-            a: self.a + _rhs,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
@@ -288,11 +263,9 @@ impl std::ops::Add<f32> for Color {
 impl std::ops::Sub<f32> for Color {
     type Output = Color;
     fn sub(self, _rhs: f32) -> Color {
+        let cols: Vec<f32> = self.ch.iter().map(|v| v - _rhs).collect();
         Color {
-            r: self.r - _rhs,
-            g: self.g - _rhs,
-            b: self.b - _rhs,
-            a: self.a - _rhs,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
@@ -300,11 +273,9 @@ impl std::ops::Sub<f32> for Color {
 impl std::ops::Mul<f32> for Color {
     type Output = Color;
     fn mul(self, _rhs: f32) -> Color {
+        let cols: Vec<f32> = self.ch.iter().map(|v| v * _rhs).collect();
         Color {
-            r: self.r * _rhs,
-            g: self.g * _rhs,
-            b: self.b * _rhs,
-            a: self.a * _rhs,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
@@ -312,11 +283,9 @@ impl std::ops::Mul<f32> for Color {
 impl std::ops::Div<f32> for Color {
     type Output = Color;
     fn div(self, _rhs: f32) -> Color {
+        let cols: Vec<f32> = self.ch.iter().map(|v| v / _rhs).collect();
         Color {
-            r: self.r / _rhs,
-            g: self.g / _rhs,
-            b: self.b / _rhs,
-            a: self.a / _rhs,
+            ch: cols.try_into().unwrap(),
             mode: self.mode,
         }
     }
