@@ -59,32 +59,33 @@ impl Color {
     }
 
     pub fn to(self, ctype: ColorType) -> Color {
+        let mut out = self;
         if self.mode != ctype {
             match ctype {
                 ColorType::HSVA => {
                     match self.mode {
-                        ColorType::RGBA => self.to_HSVA(),
-                        ColorType::SRGBA => self.to_RGBA().to_HSVA(),
-                        _ => self,
-                    };
+                        ColorType::RGBA => out = self.to_HSVA(),
+                        ColorType::SRGBA => out = self.to_RGBA().to_HSVA(),
+                        _ => out = self,
+                    }
                 }
                 ColorType::RGBA => {
                     match self.mode {
-                        ColorType::SRGBA => self.to_RGBA(),
-                        ColorType::HSVA => self.to_RGBA(),
-                        _ => self,
-                    };
+                        ColorType::SRGBA => out = self.to_RGBA(),
+                        ColorType::HSVA => out = self.to_RGBA(),
+                        _ => out = self,
+                    }
                 }
                 ColorType::SRGBA => {
                     match self.mode {
-                        ColorType::RGBA => self.to_sRGBA(),
-                        ColorType::HSVA => self.to_RGBA().to_sRGBA(),
-                        _ => self,
-                    };
+                        ColorType::RGBA => out = self.to_sRGBA(),
+                        ColorType::HSVA => out = self.to_RGBA().to_sRGBA(),
+                        _ => out = self,
+                    }
                 }
             }
         }
-        self
+        out
     }
 
     fn sRGB(value: f32, inverse: bool) -> f32 {
@@ -187,7 +188,7 @@ impl Color {
 impl FromStr for Color {
     type Err = ParseIntError;
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let mut cols: Vec<f32> = string
+        let cols: Vec<f32> = string
             .split(',')
             .map(|x| x.parse::<f32>().unwrap())
             .collect();
