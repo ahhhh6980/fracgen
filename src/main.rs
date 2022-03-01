@@ -22,12 +22,12 @@ use num::complex::Complex;
 use rand::Rng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
-    path::{self, Path},
+    path,
     time::Instant,
 };
 
-mod rgbaf;
-use rgbaf::RgbaF;
+mod color;
+use color::Color;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
@@ -50,7 +50,7 @@ pub struct Args {
     #[clap(short, long, default_value = ".7")]
     zoom: f32,
 
-    #[clap(short, long, default_value = "1")]
+    #[clap(short, long, default_value = "4")]
     samples: usize,
 
     #[clap(short, long, default_value = "2.0")]
@@ -66,7 +66,7 @@ pub struct Args {
     cexp: f32,
 
     #[clap(short, long, default_value = "0,0,0,255")]
-    set_color: RgbaF,
+    set_color: Color,
 }
 
 fn abs(z: Complex<f32>) -> f32 {
@@ -83,7 +83,7 @@ pub struct Functs {
     iter_funct: fn(Complex<f32>, Complex<f32>) -> Complex<f32>,
     init_funct: fn(Complex<f32>) -> Complex<f32>,
     cmap_funct: fn(z: Complex<f32>) -> Complex<f32>,
-    color_funct: fn(f32, f32, Complex<f32>, f32, f32) -> RgbaF,
+    color_funct: fn(f32, f32, Complex<f32>, f32, f32) -> Color,
 }
 
 pub struct Renderer {
@@ -104,7 +104,7 @@ impl Renderer {
     }
 
     pub fn pixel(&self, i: i32) -> Rgba<u16> {
-        let mut out = RgbaF::new(0.0);
+        let mut out = Color::new(0.0);
         let d: Complex<f32> = normalize_coords(1, 1, self.width, self.height, self.args.zoom)
             - normalize_coords(0, 0, self.width, self.height, self.args.zoom);
         let mut rng = rand::thread_rng();
@@ -130,7 +130,7 @@ impl Renderer {
 
             let mut color = (self.functs.color_funct)(i, s, z, self.args.limit, self.args.cexp);
 
-            color = color.to_sRGB();
+            color = color.to_sRGBA();
             if i < self.args.limit {
                 out = out + (color * color);
             } else {
@@ -139,7 +139,7 @@ impl Renderer {
         }
         out = out / self.args.samples as f32;
         Rgba::from(
-            out.to_RGB()
+            out.to_RGBA()
                 .to_arr()
                 .map(|v| (v.sqrt() * u16::MAX as f32) as u16),
         )
@@ -176,9 +176,9 @@ impl Renderer {
     }
 }
 
-fn coloring(i: f32, s: f32, z: Complex<f32>, limit: f32, cexp: f32) -> RgbaF {
+fn coloring(i: f32, s: f32, z: Complex<f32>, limit: f32, cexp: f32) -> Color {
     let hue = ((1.0 - (s / limit)) * 360.0).powf(cexp).powf(1.5);
-    let mut color = RgbaF::from_hsv(hue, 0.5, 1.0, 1.0);
+    let mut color = Color::from_hsv(hue, 1.0, 1.0, 1.0);
     color.a = 1.0;
     color
 }
@@ -228,7 +228,7 @@ fn main() {
         .action("default", "default")
         .action("clicked", "Open Image")
         .body(&notif)
-        .timeout(Timeout::Milliseconds(30000))
+        .timeout(Timeout::Milliseconds(60000))
         .show()
         .unwrap()
         .wait_for_action(|action| match action {
@@ -237,5 +237,6 @@ fn main() {
             "__closed" => (),
             _ => (),
         });
+        
     println!("{}", notif);
 }
